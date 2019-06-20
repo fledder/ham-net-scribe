@@ -8,6 +8,10 @@ class Station:
         self.ack = ack
         self.note = note
         self.id = id
+        if ack:
+            self.ackText = 'Yes'
+        else:
+            self.ackText = ''
     
     #Test a station for a callsign match
     def match(self, pattern):
@@ -40,7 +44,14 @@ class Station:
                 (self.callsign, self.name, self.ack, self.note))
             p.con.commit()
             self.id = p.cur.lastrowid
-
+    
+    def toggleAck(self):
+        if self.ack:
+            self.ack = False
+            self.ackText = ''
+        else:   
+            self.ack = True
+            self.ackText = 'Yes'
 
 #Class for a single net script
 class Script:
@@ -74,13 +85,31 @@ class Script:
 class StationList:
     
     currentStation = Station()
+    currentStationIndex = 0
     
     def __init__(self, p):
         self.list = []
         self.updateListFromDatabase(p)
+        self.currentStationIndex = 0
+        self.currentStation = self.list[self.currentStationIndex]
     
     def updateListFromDatabase(self, p):
         for row in p.cur.execute('SELECT rowid, callsign, name, ack, note FROM stations ORDER BY callsign;'):
             self.list.append(Station(row[1], row[2], row[3], row[4], row[0]))
     
+    def selectNext(self):
+        self.currentStationIndex = self.currentStationIndex + 1
+        if self.currentStationIndex >= len(self.list):
+            self.currentStationIndex = 0
+        self.currentStation = self.list[self.currentStationIndex]
     
+    def selectPrevious(self):
+        self.currentStationIndex = self.currentStationIndex - 1
+        if self.currentStationIndex < 0:
+            self.currentStationIndex = len(self.list) - 1
+        self.currentStation = self.list[self.currentStationIndex]
+    
+    def selectStation(self, index):
+        if index >= 0 and index < len(self.list):
+            self.currentStationIndex = index
+            self.currentStation = self.list[self.currentStationIndex]

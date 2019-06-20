@@ -4,79 +4,84 @@ from PyQt5.QtCore import (Qt, pyqtSignal, QObject, QEvent)
 
 from persist import Persist
 from dataStructures import Station, Script, StationList
+from customWidgets import *
 
 p = Persist()
 
-class stationTable(QTableWidget):
-    
-    tableSelectionChanged = pyqtSignal()
-    acknowledgedToggle = pyqtSignal()
-    
-    def __init__(self, one, two):
-        QTableWidget.__init__(self, one, two)
-        self.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        
-    def populate(self, stations):
-        for i in range(len(stations.list)):
-            station = stations.list[i]
-            itemToInsert = QTableWidgetItem(station.callsign)
-            self.setItem(i, 0, itemToInsert)
-            itemToInsert = QTableWidgetItem(station.name)
-            self.setItem(i, 1, itemToInsert)
-            itemToInsert = QTableWidgetItem(station.ack)
-            self.setItem(i, 2, itemToInsert)
-            itemToInsert = QTableWidgetItem(station.note)
-            self.setItem(i, 3, itemToInsert)
-    
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Up:
-            if len(self.selectedItems()) >= 1:
-                nextIndex = self.selectedItems()[0].row()-1
-            else:
-                nextIndex = 0
-            if nextIndex < 0:
-                nextIndex = 0
-            self.setCurrentItem(self.item(nextIndex,0))
-            self.tableSelectionChanged.emit()
-            
-        elif event.key() == Qt.Key_Down:
-            if len(self.selectedItems()) >= 1:
-                nextIndex = self.selectedItems()[0].row()+1
-            else:
-                nextIndex = 0
-            if nextIndex >= self.rowCount():
-                nextIndex = self.rowCount() - 1
-            self.setCurrentItem(self.item(nextIndex,0))
-            self.tableSelectionChanged.emit()
-        
-        elif event.key() == Qt.Key_Space:
-            self.acknowledgedToggle.emit()
+LINEEDIT_COMMON_STYLESHEET = '''
+    font-family: "Consolas";
+    font-size: 24px;
+    font-style: bold;
+    '''
 
+LINEEDIT_SELECTED_STYLESHEET = '''
+    background-color: rgb(200, 255, 200, 255);
+    border: 4px solid green;
+    color: rgb(0, 0, 0, 255);
+    ''' + LINEEDIT_COMMON_STYLESHEET
+
+LINEEDIT_UNSELECTED_STYLESHEET = '''
+    background-color: rgb(127, 127, 127, 255);
+    border: 4px solid gray;
+    color: rgb(255, 255, 255, 255);
+    ''' + LINEEDIT_COMMON_STYLESHEET
 
 class MainFormWidget(QWidget):
     
     def changeSelection(self):
-        if len(self.stationTable.selectedItems()) > 0:
-            selectedItem = self.stationTable.selectedItems()
-            self.callsignBox.setText(selectedItem[0].text())
-            self.nameBox.setText(selectedItem[1].text())
-            self.noteBox.setText(selectedItem[3].text())
+        self.callsignBox.setText(self.stations.currentStation.callsign)
+        self.nameBox.setText(self.stations.currentStation.name)
+        self.noteBox.setText(self.stations.currentStation.note)
+        self.setAck(self.stations.currentStation.ack)
+        self.stationTable.setSelection(self.stations.currentStation.callsign)
+    
+    def selectNext(self):
+        self.stations.selectNext()
+        self.changeSelection()
+    
+    def selectPrevious(self):
+        self.stations.selectPrevious()
+        self.changeSelection()
+    
+    def setAck(self, state):
+        if state:
+            self.ackLabel.setPixmap(self.unackPixmap)
+        else:
+            self.ackLabel.setPixmap(self.ackPixmap)
     
     def toggleAck(self):
-        if len(self.stationTable.selectedItems()) > 0:
-            selectedItem = self.stationTable.selectedItems()
-            if self.ackCheckbox.isChecked():
-                self.ackCheckbox.setCheckState(Qt.Unchecked)
+        self.stations.currentStation.toggleAck()
+        self.stations.currentStation.saveToDatabase(p)
+        self.setAck(self.stations.currentStation.ack)
+        
+    def changeHighlight(self, highlightIndex):
+        controls = {0: self.callsignBox, 1: self.nameBox, 2: self.noteBox}
+        for key, control in controls.items():
+            if key == highlightIndex:
+                control.setStyleSheet(LINEEDIT_SELECTED_STYLESHEET)
             else:
-                self.ackCheckbox.setCheckState(Qt.Checked)
+                control.setStyleSheet(LINEEDIT_UNSELECTED_STYLESHEET)
+    
+    def changeSelectionRight(self):
+        self.selectedControl = self.selectedControl + 1
+        if self.selectedControl > 2:
+            self.selectedControl = 0
+        self.changeHighlight(self.selectedControl)
+    
+    def changeSelectionLeft(self):
+        self.selectedControl = self.selectedControl - 1
+        if self.selectedControl < 0:
+            self.selectedControl = 2
+        self.changeHighlight(self.selectedControl)
+    
     
     def __init__(self):
         super().__init__()
         self.mainLayout = QVBoxLayout()
         
         self.upperLayout = QGridLayout()
+        
+        self.selectedControl = 0
         
         self.callsignLabel = QLabel('Callsign')
         self.upperLayout.addWidget(self.callsignLabel,0,0)
@@ -92,10 +97,11 @@ class MainFormWidget(QWidget):
         
         self.ackLabel = QLabel('Acknowledged')
         self.upperLayout.addWidget(self.ackLabel,0,2)
-        self.ackCheckbox = QCheckBox()
-        self.ackCheckbox.setFocusPolicy(Qt.NoFocus)
-        self.ackCheckbox.setStyleSheet('margin-left: 50%; margin-right: 50%;')
-        self.upperLayout.addWidget(self.ackCheckbox,1,2)
+        self.ackPixmap = QPixmap('green-check.png').scaled(20, 20)
+        self.unackPixmap = QPixmap('red-dashed-square.png').scaled(20,20)
+        self.ackLabel = QLabel()
+        self.ackLabel.setFocusPolicy(Qt.NoFocus)
+        self.upperLayout.addWidget(self.ackLabel,1,2)
         
         self.noteLabel = QLabel('Notes')
         self.upperLayout.addWidget(self.noteLabel,0,3)
@@ -105,14 +111,22 @@ class MainFormWidget(QWidget):
         
         self.mainLayout.addLayout(self.upperLayout)
         
-        stations = StationList(p)
+        self.changeHighlight(0)
+        
+        self.stations = StationList(p)
         self.setGeometry(300,300,800,500)
         self.setWindowTitle('Simple Net Scribe')
-        self.stationTable = stationTable(len(stations.list), 4)
+        self.stationTable = stationTable(len(self.stations.list), 4)
         
-        self.stationTable.populate(stations)
-        self.stationTable.tableSelectionChanged.connect(self.changeSelection)
+        self.stationTable.populate(self.stations)
+        self.changeSelection()
+        
         self.stationTable.acknowledgedToggle.connect(self.toggleAck)
+        self.stationTable.selectRight.connect(self.changeSelectionRight)
+        self.stationTable.selectLeft.connect(self.changeSelectionLeft)
+        self.stationTable.refreshSignal.connect(lambda: self.stationTable.refresh(self.stations))
+        self.stationTable.selectNextSignal.connect(self.selectNext)
+        self.stationTable.selectPreviousSignal.connect(self.selectPrevious)
         
         self.mainLayout.addWidget(self.stationTable)
         self.setLayout(self.mainLayout)
