@@ -28,6 +28,41 @@ LINEEDIT_UNSELECTED_STYLESHEET = '''
 
 class MainFormWidget(QWidget):
     
+    acknowledgedToggle = pyqtSignal()
+    selectRight = pyqtSignal()
+    selectLeft = pyqtSignal()
+    refreshSignal = pyqtSignal()
+    selectNextSignal = pyqtSignal()
+    selectPreviousSignal = pyqtSignal()
+    cursorRight = pyqtSignal()
+    cursorLeft = pyqtSignal()
+    
+    def keyPressEvent(self, event):
+        
+        isLetter = event.key() >= Qt.Key_A and event.key() <= Qt.Key_Z
+        isNumber = event.key() >= Qt.Key_0 and event.key() <= Qt.Key_9
+        
+        if isLetter or isNumber:
+            self.callsignBox.handleInput(event.key())
+        
+        else:
+            
+            unmodifiedKeyMap = {
+                Qt.Key_Space: self.acknowledgedToggle.emit,
+                Qt.Key_Right: self.cursorRight.emit,
+                Qt.Key_Left: self.cursorLeft.emit,
+                Qt.Key_Tab: self.selectRight.emit,
+                Qt.Key_Backtab: self.selectLeft.emit,
+                Qt.Key_F5: self.refreshSignal.emit,
+                Qt.Key_Up: self.selectPreviousSignal.emit,
+                Qt.Key_Down: self.selectNextSignal.emit,
+                }
+                
+            keyMap = unmodifiedKeyMap
+            
+            if event.key() in keyMap:
+                keyMap[event.key()]()
+    
     def changeSelection(self):
         self.callsignBox.setText(self.stations.currentStation.callsign)
         self.nameBox.setText(self.stations.currentStation.name)
@@ -74,7 +109,6 @@ class MainFormWidget(QWidget):
             self.selectedControl = 2
         self.changeHighlight(self.selectedControl)
     
-    
     def __init__(self):
         super().__init__()
         self.mainLayout = QVBoxLayout()
@@ -85,7 +119,7 @@ class MainFormWidget(QWidget):
         
         self.callsignLabel = QLabel('Callsign')
         self.upperLayout.addWidget(self.callsignLabel,0,0)
-        self.callsignBox = QLineEdit()
+        self.callsignBox = callsignEdit()
         self.callsignBox.setFocusPolicy(Qt.NoFocus)
         self.upperLayout.addWidget(self.callsignBox,1,0)
         
@@ -121,12 +155,12 @@ class MainFormWidget(QWidget):
         self.stationTable.populate(self.stations)
         self.changeSelection()
         
-        self.stationTable.acknowledgedToggle.connect(self.toggleAck)
-        self.stationTable.selectRight.connect(self.changeSelectionRight)
-        self.stationTable.selectLeft.connect(self.changeSelectionLeft)
-        self.stationTable.refreshSignal.connect(lambda: self.stationTable.refresh(self.stations))
-        self.stationTable.selectNextSignal.connect(self.selectNext)
-        self.stationTable.selectPreviousSignal.connect(self.selectPrevious)
+        self.acknowledgedToggle.connect(self.toggleAck)
+        self.selectRight.connect(self.changeSelectionRight)
+        self.selectLeft.connect(self.changeSelectionLeft)
+        self.refreshSignal.connect(lambda: self.stationTable.refresh(self.stations))
+        self.selectNextSignal.connect(self.selectNext)
+        self.selectPreviousSignal.connect(self.selectPrevious)
         
         self.mainLayout.addWidget(self.stationTable)
         self.setLayout(self.mainLayout)
