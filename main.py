@@ -8,23 +8,15 @@ from customWidgets import *
 
 p = Persist()
 
-LINEEDIT_COMMON_STYLESHEET = '''
+
+PHONETIC_STYLESHEET = '''
+    background-color: rgb(0, 0, 0, 255);
     font-family: "Consolas";
     font-size: 24px;
     font-style: bold;
+    color: rgb(128, 255, 255, 255);
+    qproperty-alignment: AlignCenter;
     '''
-
-LINEEDIT_SELECTED_STYLESHEET = '''
-    background-color: rgb(200, 255, 200, 255);
-    border: 4px solid green;
-    color: rgb(0, 0, 0, 255);
-    ''' + LINEEDIT_COMMON_STYLESHEET
-
-LINEEDIT_UNSELECTED_STYLESHEET = '''
-    background-color: rgb(127, 127, 127, 255);
-    border: 4px solid gray;
-    color: rgb(255, 255, 255, 255);
-    ''' + LINEEDIT_COMMON_STYLESHEET
 
 class MainFormWidget(QWidget):
     
@@ -36,14 +28,25 @@ class MainFormWidget(QWidget):
     selectPreviousSignal = pyqtSignal()
     cursorRight = pyqtSignal()
     cursorLeft = pyqtSignal()
+    deleteSignal = pyqtSignal()
     
     def keyPressEvent(self, event):
         
         isLetter = event.key() >= Qt.Key_A and event.key() <= Qt.Key_Z
         isNumber = event.key() >= Qt.Key_0 and event.key() <= Qt.Key_9
+        isSpace = event.key() == Qt.Key_Space
         
-        if isLetter or isNumber:
-            self.callsignBox.handleInput(event.key())
+        if (isLetter or isNumber) and self.callsignBox.selected:
+            self.callsignBox.handleInput(event)
+            self.saveCallsign()
+        elif isLetter or isNumber or isSpace:
+            if self.nameBox.selected:
+                self.nameBox.handleInput(event)
+                self.saveName()
+            elif self.noteBox.selected:
+                self.noteBox.handleInput(event)
+                self.saveNote()
+
         
         else:
             
@@ -56,6 +59,7 @@ class MainFormWidget(QWidget):
                 Qt.Key_F5: self.refreshSignal.emit,
                 Qt.Key_Up: self.selectPreviousSignal.emit,
                 Qt.Key_Down: self.selectNextSignal.emit,
+                Qt.Key_Delete: self.deleteSignal.emit,
                 }
                 
             keyMap = unmodifiedKeyMap
@@ -63,12 +67,38 @@ class MainFormWidget(QWidget):
             if event.key() in keyMap:
                 keyMap[event.key()]()
     
+    def updatePhonetics(self):
+        phoneticArray = self.stations.currentStation.getPhoneticArray()
+        for i in range(6):
+            self.phoneticLabels[i].setText(phoneticArray[i])
+    
+    def saveCallsign(self):
+        if self.callsignBox.selected:
+            print('saving callsign')
+            self.stations.currentStation.callsign = self.callsignBox.text()
+            self.stations.currentStation.saveToDatabase(p)
+            self.stationTable.refresh(self.stations)
+            self.updatePhonetics()
+    
+    def saveName(self):
+        if self.nameBox.selected:
+            self.stations.currentStation.name = self.nameBox.text()
+            self.stations.currentStation.saveToDatabase(p)
+            self.stationTable.refresh(self.stations)
+    
+    def saveNote(self):
+        if self.noteBox.selected:
+            self.stations.currentStation.note = self.noteBox.text()
+            self.stations.currentStation.saveToDatabase(p)
+            self.stationTable.refresh(self.stations)
+    
     def changeSelection(self):
         self.callsignBox.setText(self.stations.currentStation.callsign)
         self.nameBox.setText(self.stations.currentStation.name)
         self.noteBox.setText(self.stations.currentStation.note)
         self.setAck(self.stations.currentStation.ack)
         self.stationTable.setSelection(self.stations.currentStation.callsign)
+        self.updatePhonetics()
     
     def selectNext(self):
         self.stations.selectNext()
@@ -85,17 +115,18 @@ class MainFormWidget(QWidget):
             self.ackLabel.setPixmap(self.ackPixmap)
     
     def toggleAck(self):
-        self.stations.currentStation.toggleAck()
-        self.stations.currentStation.saveToDatabase(p)
-        self.setAck(self.stations.currentStation.ack)
+        if self.callsignBox.selected:
+            self.stations.currentStation.toggleAck()
+            self.stations.currentStation.saveToDatabase(p)
+            self.setAck(self.stations.currentStation.ack)
         
     def changeHighlight(self, highlightIndex):
         controls = {0: self.callsignBox, 1: self.nameBox, 2: self.noteBox}
         for key, control in controls.items():
             if key == highlightIndex:
-                control.setStyleSheet(LINEEDIT_SELECTED_STYLESHEET)
+                control.select()
             else:
-                control.setStyleSheet(LINEEDIT_UNSELECTED_STYLESHEET)
+                control.deselect()
     
     def changeSelectionRight(self):
         self.selectedControl = self.selectedControl + 1
@@ -125,7 +156,7 @@ class MainFormWidget(QWidget):
         
         self.nameLabel = QLabel('Name')
         self.upperLayout.addWidget(self.nameLabel,0,1)
-        self.nameBox = QLineEdit()
+        self.nameBox = primaryEdit()
         self.nameBox.setFocusPolicy(Qt.NoFocus)
         self.upperLayout.addWidget(self.nameBox,1,1)
         
@@ -139,13 +170,21 @@ class MainFormWidget(QWidget):
         
         self.noteLabel = QLabel('Notes')
         self.upperLayout.addWidget(self.noteLabel,0,3)
-        self.noteBox = QLineEdit()
+        self.noteBox = primaryEdit()
         self.noteBox.setFocusPolicy(Qt.NoFocus)
         self.upperLayout.addWidget(self.noteBox,1,3)
         
         self.mainLayout.addLayout(self.upperLayout)
         
         self.changeHighlight(0)
+        
+        self.phoneticLayout = QHBoxLayout()
+        self.phoneticLabels = []
+        for i in range(6):
+            self.phoneticLabels.append(QLabel(''))
+            self.phoneticLabels[i].setStyleSheet(PHONETIC_STYLESHEET)
+            self.phoneticLayout.addWidget(self.phoneticLabels[i])
+        self.mainLayout.addLayout(self.phoneticLayout)
         
         self.stations = StationList(p)
         self.setGeometry(300,300,800,500)
@@ -161,6 +200,21 @@ class MainFormWidget(QWidget):
         self.refreshSignal.connect(lambda: self.stationTable.refresh(self.stations))
         self.selectNextSignal.connect(self.selectNext)
         self.selectPreviousSignal.connect(self.selectPrevious)
+        
+        self.cursorRight.connect(self.callsignBox.cursorRight)
+        self.cursorRight.connect(self.nameBox.cursorRight)
+        self.cursorRight.connect(self.noteBox.cursorRight)
+        
+        self.cursorLeft.connect(self.callsignBox.cursorLeft)
+        self.cursorLeft.connect(self.nameBox.cursorLeft)
+        self.cursorLeft.connect(self.noteBox.cursorLeft)
+        
+        self.deleteSignal.connect(self.callsignBox.handleDelete)
+        self.deleteSignal.connect(self.saveCallsign)
+        self.deleteSignal.connect(self.nameBox.handleDelete)
+        self.deleteSignal.connect(self.saveName)
+        self.deleteSignal.connect(self.noteBox.handleDelete)
+        self.deleteSignal.connect(self.saveNote)
         
         self.mainLayout.addWidget(self.stationTable)
         self.setLayout(self.mainLayout)

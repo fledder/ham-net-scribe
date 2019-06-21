@@ -10,7 +10,25 @@ TABLE_STYLESHEET = '''
     font-family: "consolas";
     font-size: 18px;
     '''
-    
+
+EDITOR_COMMON_STYLESHEET = '''
+    font-family: "Consolas";
+    font-size: 24px;
+    font-style: bold;
+    '''
+
+EDITOR_SELECTED_STYLESHEET = '''
+    background-color: rgb(200, 255, 200, 255);
+    border: 4px solid green;
+    color: rgb(0, 0, 0, 255);
+    ''' + EDITOR_COMMON_STYLESHEET
+
+EDITOR_UNSELECTED_STYLESHEET = '''
+    background-color: rgb(127, 127, 127, 255);
+    border: 4px solid gray;
+    color: rgb(255, 255, 255, 255);
+    ''' + EDITOR_COMMON_STYLESHEET
+
 
 class stationTable(QTableWidget):
     
@@ -69,18 +87,62 @@ class callsignEdit(QLineEdit):
     def __init__(self):
         QLineEdit.__init__(self)
     
+    def select(self):
+        self.selected = True
+        self.repaint()
+    
+    def deselect(self):
+        self.selected = False
+        self.repaint()
+    
     def isValidCall(self):
         import re
         if re.match(r'[a-zA-Z]{1,2}\d[a-zA-Z]{1,3}', self.text()):
             return True
         return False
     
-    def handleInput(self, key):
-        pass
+    def handleInput(self, event):
+        if self.selected:
+            pressedChar = event.text().upper()
+            print(self.cursorPos)
+            if pressedChar in '0123456789':
+                self.cursorPos = 3
+                self.setText(self.text()[:2]+pressedChar+self.text()[3:])
+            else:
+                if self.cursorPos == 0 and pressedChar not in 'KNW':
+                    self.cursorPos = 1
+                if self.cursorPos == 2:
+                    self.cursorPos = 3
+                if self.cursorPos < len(self.text()):
+                    self.setText(self.text()[:self.cursorPos] + pressedChar + self.text()[self.cursorPos+1:])
+                else:
+                    self.setText(self.text()[:self.cursorPos] + pressedChar)
+                self.cursorRight()
+            self.repaint()
+    
+    def handleDelete(self):
+        if self.selected:
+            if self.cursorPos == 0:
+                self.setText(' '+self.text()[1:])
+                self.cursorRight()
+            elif self.cursorPos == 1:
+                self.setText(' '+self.text()[0]+self.text()[2:])
+                self.cursorRight()
+            elif self.cursorPos == 2:
+                self.setText(self.text()[:2] + ' ' + self.text()[3:])
+                self.cursorRight()
+            else:
+                self.setText(self.text()[:3]+self.text()[4:]+' ')
+                self.repaint()
     
     def paintEvent(self, event):
     
         import re
+        
+        if self.selected:
+            self.setStyleSheet(EDITOR_SELECTED_STYLESHEET)
+        else:
+            self.setStyleSheet(EDITOR_UNSELECTED_STYLESHEET)
         
         opt = QStyleOption()
         opt.initFrom(self)
@@ -88,40 +150,8 @@ class callsignEdit(QLineEdit):
         s = self.style()
         s.drawPrimitive(QStyle.PE_Widget, opt, painter, self)
         
-        if self.isValidCall():
-            callToDisplay = self.text()
-        else:
-            parts = re.search(r"([a-zA-Z\{1,2})(\d)([a-zA-Z]{1,3})", self.text())
-            if len(parts.groups()) >= 3:
-                prefix = parts.group(0)
-                number = parts.group(1)
-                suffix = parts.group(2)
-            else:
-                numberMatch = re.search(r"\d", self.text())
-                if numberMatch:
-                    prefix = self.text()[0:numberMatch.start()]
-                    number = self.text()[numberMatch.start(): numberMatch.start() + 1]
-                    suffix = self.text()[numberMatch.start()+1:]
-                    if len(prefix) == 0:
-                        prefix = '  '
-                    if len(suffix) == 0:
-                        suffix = '   '
-                else:
-                    number = '#'
-                    if len(self.text()) >= 3:
-                        prefix = self.text()[:2]
-                        suffix = self.text()[2:]
-                    elif len(self.text()) == 2:
-                        prefix = self.text()
-                        suffix = '   '
-                    elif len(self.text()) == 1:
-                        prefix = self.text()
-                        suffix = '   '
-                    else:
-                        prefix = '  '
-                        suffix = '   '
-                
-            callToDisplay = prefix + number + suffix
+        
+        callToDisplay = self.text()
             
         fontMetrics = self.fontMetrics()
         textWidth = fontMetrics.width(callToDisplay)
@@ -143,25 +173,118 @@ class callsignEdit(QLineEdit):
         
         
         textLeft = ((self.width() - totalCallWidth) / 2) + callOffsetDistance
-        textBottom = int(textHeight * .85)
+        textBottom = int(textHeight * .9)
         
         
         charRectBrush = QBrush(Qt.SolidPattern)
-        charRectBrush.setColor(self.palette().color(QWidget.backgroundRole(self)).darker(130))
-        for offset in range(6):
-            rectLeft = textLeft + fontMetrics.width(' '*callOffset + callToDisplay[:(offset - callOffset)]) + 1
-            rectTop = textHeight * .2
-            rectWidth = fontMetrics.width(' ') - 2
+        charRectBrush.setColor(self.palette().color(QWidget.backgroundRole(self)).darker(125))
+        for offset in range(len(callToDisplay)):
+            thisChar = callToDisplay[offset]
+            rectLeft = textLeft + fontMetrics.width(callToDisplay[:(offset)])
+            rectTop = textBottom * .25
+            rectWidth = fontMetrics.width(thisChar) - 2
             rectHeight = fontMetrics.height() * .8
             painter.fillRect(rectLeft, rectTop, rectWidth, rectHeight, charRectBrush)
         
         painter.drawText(textLeft, textBottom, callToDisplay)
         
-        cursorLeft = textLeft + fontMetrics.width(callToDisplay[:self.cursorPos])
-        cursorWidth = fontMetrics.width(callToDisplay[self.cursorPos])
+        if self.selected:
+            cursorLeft = textLeft + fontMetrics.width(callToDisplay[:self.cursorPos])
+            cursorWidth = fontMetrics.width(callToDisplay[self.cursorPos])
+            
+            cursorBrush = QBrush(Qt.SolidPattern)
+            cursorBrush.setColor(QColor(0, 0, 0, 255))
+            cursor = painter.drawRect(cursorLeft, textHeight, cursorWidth, 3)
+            painter.fillRect(cursorLeft, textHeight, cursorWidth, 3, cursorBrush)
         
-        cursorBrush = QBrush(Qt.SolidPattern)
-        cursorBrush.setColor(QColor(0, 0, 0, 255))
-        cursor = painter.drawRect(cursorLeft, textHeight, cursorWidth, 3)
-        painter.fillRect(cursorLeft, textHeight, cursorWidth, 3, cursorBrush)
+    def cursorRight(self):
+        self.cursorPos = self.cursorPos + 1
+        if self.cursorPos > 5:
+            self.cursorPos = 0
+        self.repaint()
+    
+    def cursorLeft(self):
+        self.cursorPos = self.cursorPos - 1
+        if self.cursorPos < 0:
+            self.cursorPos = 5
+        self.repaint()
+
+class primaryEdit(QLineEdit):
+    
+    selected = False
+    cursorPos = 0
+    
+    def __init__(self):
+        QLineEdit.__init__(self)
+    
+    def select(self):
+        self.selected = True
+        self.repaint()
+    
+    def deselect(self):
+        self.selected = False
+        self.repaint()
+    
+    def handleInput(self, event):
+        if self.selected:
+            pressedChar = event.text().upper()
+            if self.cursorPos < len(self.text()):
+                self.setText(self.text()[:self.cursorPos] + pressedChar + self.text()[self.cursorPos:])
+            else:
+                self.setText(self.text()[:self.cursorPos] + pressedChar)
+            self.cursorRight()
+    
+    def handleDelete(self):
+        if self.selected:
+            self.setText(self.text()[:self.cursorPos]+self.text()[self.cursorPos+1:])
+            self.repaint()
+    
+    def paintEvent(self, event):
+    
+        if self.selected:
+            self.setStyleSheet(EDITOR_SELECTED_STYLESHEET)
+        else:
+            self.setStyleSheet(EDITOR_UNSELECTED_STYLESHEET)
         
+        opt = QStyleOption()
+        opt.initFrom(self)
+        painter = QPainter(self)
+        s = self.style()
+        s.drawPrimitive(QStyle.PE_Widget, opt, painter, self)
+        
+        fontMetrics = self.fontMetrics()
+        textWidth = fontMetrics.width(self.text())
+        textHeight = fontMetrics.height()
+        
+        textLeft = ((self.width() - textWidth) / 2)
+        textBottom = int(textHeight * .9)
+        
+        painter.drawText(textLeft, textBottom, self.text())
+        
+        if self.selected:
+            cursorLeft = textLeft + fontMetrics.width(self.text()[:self.cursorPos])
+            if self.cursorPos < len(self.text()):
+                cursorWidth = fontMetrics.width(self.text()[self.cursorPos])
+            else:
+                cursorWidth = fontMetrics.width('0')
+            
+            cursorBrush = QBrush(Qt.SolidPattern)
+            cursorBrush.setColor(QColor(0, 0, 0, 255))
+            cursor = painter.drawRect(cursorLeft, textHeight, cursorWidth, 3)
+            painter.fillRect(cursorLeft, textHeight, cursorWidth, 3, cursorBrush)
+        
+    def cursorRight(self):
+        self.cursorPos = self.cursorPos + 1
+        if self.cursorPos > len(self.text()):
+            self.cursorPos = 0
+        if len(self.text()) == 0:
+            self.cursorPos = 0
+        self.repaint()
+    
+    def cursorLeft(self):
+        self.cursorPos = self.cursorPos - 1
+        if self.cursorPos < 0:
+            self.cursorPos = len(self.text())
+        if len(self.text()) == 0:
+            self.cursorPos = 0
+        self.repaint()

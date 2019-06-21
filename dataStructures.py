@@ -1,3 +1,43 @@
+PHONETIC_ALPHABET = {
+    'A': 'ALPHA',
+    'B': 'BRAVO',
+    'C': 'CHARLIE',
+    'D': 'DELTA',
+    'E': 'ECHO',
+    'F': 'FOXTROT',
+    'G': 'GOLF',
+    'H': 'HOTEL',
+    'I': 'INDIA',
+    'J': 'JULIET',
+    'K': 'KILO',
+    'L': 'LIMA',
+    'M': 'MIKE',
+    'N': 'NOVEMBER',
+    'O': 'OSCAR',
+    'P': 'PAPA',
+    'Q': 'QUEBEC',
+    'R': 'ROMEO',
+    'S': 'SIERRA',
+    'T': 'TANGO',
+    'U': 'UNIFORM', #'UNICORN',
+    'V': 'VICTOR',
+    'W': 'WHISKEY',
+    'X': 'XRAY',
+    'Y': 'YANKEE',
+    'Z': 'ZULU',
+    '0': 'ZERO',
+    '1': 'ONE',
+    '2': 'TWO',
+    '3': 'THREE', #'TREE',
+    '4': 'FOUR', #'FOWER',
+    '5': 'FIVE', #'FIFE',
+    '6': 'SIX',
+    '7': 'SEVEN',
+    '8': 'EIGHT',
+    '9': 'NINER', #'NINE'
+    ' ': ''
+}
+
 #Class for a single station
 class Station:
     
@@ -52,6 +92,12 @@ class Station:
         else:   
             self.ack = True
             self.ackText = 'Yes'
+    
+    def getPhoneticArray(self):
+        outList = []
+        for callChar in self.callsign:
+            outList.append(PHONETIC_ALPHABET[callChar])
+        return outList
 
 #Class for a single net script
 class Script:
