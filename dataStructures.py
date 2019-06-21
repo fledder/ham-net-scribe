@@ -85,6 +85,7 @@ class Station:
             p.con.commit()
             self.id = p.cur.lastrowid
     
+    #Change the station's acknowledge status
     def toggleAck(self):
         if self.ack:
             self.ack = False
@@ -93,6 +94,7 @@ class Station:
             self.ack = True
             self.ackText = 'Yes'
     
+    #Get an array of phonetic words from the callsign
     def getPhoneticArray(self):
         outList = []
         for callChar in self.callsign:
@@ -128,6 +130,7 @@ class Script:
             p.con.commit()
             self.id = p.cur.lastrowid
 
+#A class to handle the list of stations
 class StationList:
     
     currentStation = Station()

@@ -55,6 +55,10 @@ class stationTable(QTableWidget):
         self.horizontalHeader().hide()
         self.setFocusPolicy(Qt.NoFocus)
     
+    '''--------------------------------------------
+    Use the station list to create the items in the
+    table
+    --------------------------------------------'''
     def populate(self, stations):
         for i in range(len(stations.list)):
             station = stations.list[i]
@@ -67,30 +71,38 @@ class stationTable(QTableWidget):
             itemToInsert = QTableWidgetItem(station.note)
             self.setItem(i, 3, itemToInsert)
     
+    '''--------------------------------------------
+    Assuming the number of stations hasn't changed,
+    update the data for each
+    --------------------------------------------'''
     def refresh(self, stations):
         for i in range(len(stations.list)):
             station = stations.list[i]
             if self.item(i, 0).text() != station.callsign:
-                print('Changing callsign at ' + str(i))
                 self.setItem(i, 0, QTableWidgetItem(station.callsign))
                 
             if self.item(i, 1).text() != station.name:
-                print('Changing name at ' + str(i))
                 self.setItem(i, 1, QTableWidgetItem(station.name))
                 
             if self.item(i, 2).text() != station.ackText:
-                print('Changing ack at ' + str(i))
                 self.setItem(i, 2, QTableWidgetItem(station.ackText))
                 
             if self.item(i, 3).text() != station.note:
-                print('Changing note at ' + str(i))
                 self.setItem(i, 3, QTableWidgetItem(station.note))
-    
+    '''--------------------------------------------
+    Set the current selection based on a callsign
+    --------------------------------------------'''
     def setSelection(self, callsign):
         for i in range(self.rowCount()):
             if self.item(i, 0).text() == callsign:
                 self.setCurrentItem(self.item(i, 0))
 
+'''--------------------------------------------
+Custom subclass of QLineEdit with validation
+and methods for callsign display. Uses events
+for typing rather than focus to enable it to 
+work while not focused.
+--------------------------------------------'''
 class callsignEdit(QLineEdit):
     
     selected = True
@@ -113,83 +125,94 @@ class callsignEdit(QLineEdit):
             return True
         return False
     
+    #Handle text inputs
     def handleInput(self, event):
         if self.selected:
             pressedChar = event.text().upper()
-            print(self.cursorPos)
+            #If it's a number, it goes in the number location in the call
             if pressedChar in '0123456789':
                 self.cursorPos = 3
                 self.setText(self.text()[:2]+pressedChar+self.text()[3:])
+            #If it's a letter:
             else:
+                #US calls only at the moment, so anything besides K N or W
+                #cannot be the first letter
                 if self.cursorPos == 0 and pressedChar not in 'KNW':
                     self.cursorPos = 1
+                #If the cursor is in the number location, skip to the next
+                #letter location
                 if self.cursorPos == 2:
                     self.cursorPos = 3
+                #If the cursor is in the middle of the word, insert the character
                 if self.cursorPos < len(self.text()):
                     self.setText(self.text()[:self.cursorPos] + pressedChar + self.text()[self.cursorPos+1:])
+                #Otherwise, insert at the end
                 else:
                     self.setText(self.text()[:self.cursorPos] + pressedChar)
+                #After typing letters, advance the cursor
                 self.cursorRight()
+            #Must call repaint manually
             self.repaint()
     
+    #Handle the delete key
     def handleDelete(self):
         if self.selected:
+            #These conditionals make sure the call stays justified at the number
+            #First position, insert a space instead and advance the cursor
             if self.cursorPos == 0:
                 self.setText(' '+self.text()[1:])
                 self.cursorRight()
+            #Second position, move the first character over
             elif self.cursorPos == 1:
                 self.setText(' '+self.text()[0]+self.text()[2:])
                 self.cursorRight()
+            #Number position, just replace the number with a space
             elif self.cursorPos == 2:
                 self.setText(self.text()[:2] + ' ' + self.text()[3:])
                 self.cursorRight()
+            #Suffix, move everythig left and replace with spaces
             else:
                 self.setText(self.text()[:3]+self.text()[4:]+' ')
                 self.repaint()
     
+    #Customized paint method
     def paintEvent(self, event):
     
         import re
         
+        #Set the stylesheet based on whether or not it's selected
         if self.selected:
             self.setStyleSheet(EDITOR_SELECTED_STYLESHEET)
         else:
             self.setStyleSheet(EDITOR_UNSELECTED_STYLESHEET)
         
+        #This chunk forces the control to obey the stylesheet
         opt = QStyleOption()
         opt.initFrom(self)
         painter = QPainter(self)
         s = self.style()
         s.drawPrimitive(QStyle.PE_Widget, opt, painter, self)
         
-        
+        #had some code to justify the call, but now the database
+        #uses spaces to justify it in the record so just use
+        #the current text
         callToDisplay = self.text()
-            
+        
+        #get some info about the size of the text
         fontMetrics = self.fontMetrics()
         textWidth = fontMetrics.width(callToDisplay)
         textHeight = fontMetrics.height()
         
-        totalCallWidth = fontMetrics.width('XX#XXX')
-        
-        digitMatch = re.search(r"[0-9]", callToDisplay)
-        if digitMatch:
-            digitIndex = digitMatch.start()
-            if digitIndex < 3:
-                callOffset = 2 - digitIndex
-            else:
-                callOffset = 0
-        else:
-            callOffset = 0
-        
-        callOffsetDistance = fontMetrics.width('0'*callOffset)
-        
-        
-        textLeft = ((self.width() - totalCallWidth) / 2) + callOffsetDistance
+        #get position for centering text
+        textLeft = ((self.width() - textWidth) / 2)
+        #I don't know how this works, but this looks OK and I don't
+        #have time to research it at the moment
         textBottom = int(textHeight * .9)
         
-        
+        #Get a brush that's a little bit darker than the current background color
         charRectBrush = QBrush(Qt.SolidPattern)
         charRectBrush.setColor(self.palette().color(QWidget.backgroundRole(self)).darker(125))
+        #Loop through the number of characters and print boxes behind them
         for offset in range(len(callToDisplay)):
             thisChar = callToDisplay[offset]
             rectLeft = textLeft + fontMetrics.width(callToDisplay[:(offset)])
@@ -198,17 +221,19 @@ class callsignEdit(QLineEdit):
             rectHeight = fontMetrics.height() * .8
             painter.fillRect(rectLeft, rectTop, rectWidth, rectHeight, charRectBrush)
         
+        #Draw the text
         painter.drawText(textLeft, textBottom, callToDisplay)
         
+        #Only draw the cursor if the control is selected
         if self.selected:
             cursorLeft = textLeft + fontMetrics.width(callToDisplay[:self.cursorPos])
             cursorWidth = fontMetrics.width(callToDisplay[self.cursorPos])
             
             cursorBrush = QBrush(Qt.SolidPattern)
             cursorBrush.setColor(QColor(0, 0, 0, 255))
-            cursor = painter.drawRect(cursorLeft, textHeight, cursorWidth, 3)
             painter.fillRect(cursorLeft, textHeight, cursorWidth, 3, cursorBrush)
-        
+    
+    #helper methods for moving the cursor around
     def cursorRight(self):
         self.cursorPos = self.cursorPos + 1
         if self.cursorPos > 5:
@@ -221,6 +246,12 @@ class callsignEdit(QLineEdit):
             self.cursorPos = 5
         self.repaint()
 
+'''--------------------------------------------
+Custom subclass of QLineEdit for primary data
+about a station besides the callsign. Uses 
+events for typing rather than focus to enable 
+it to work while not focused.
+--------------------------------------------'''
 class primaryEdit(QLineEdit):
     
     selected = False
@@ -237,6 +268,7 @@ class primaryEdit(QLineEdit):
         self.selected = False
         self.repaint()
     
+    #Handle keys input. Insert if cursor not at end.
     def handleInput(self, event):
         if self.selected:
             pressedChar = event.text().upper()
@@ -246,33 +278,41 @@ class primaryEdit(QLineEdit):
                 self.setText(self.text()[:self.cursorPos] + pressedChar)
             self.cursorRight()
     
+    #Handle the delete key.
     def handleDelete(self):
         if self.selected:
             self.setText(self.text()[:self.cursorPos]+self.text()[self.cursorPos+1:])
             self.repaint()
     
+    #Custom paint method
     def paintEvent(self, event):
-    
+        
+        #Set the correct stylesheet
         if self.selected:
             self.setStyleSheet(EDITOR_SELECTED_STYLESHEET)
         else:
             self.setStyleSheet(EDITOR_UNSELECTED_STYLESHEET)
         
+        #Force it to use the stylesheet
         opt = QStyleOption()
         opt.initFrom(self)
         painter = QPainter(self)
         s = self.style()
         s.drawPrimitive(QStyle.PE_Widget, opt, painter, self)
         
+        #Get some info on the text size
         fontMetrics = self.fontMetrics()
         textWidth = fontMetrics.width(self.text())
         textHeight = fontMetrics.height()
         
+        #Calculate the text position. 
         textLeft = ((self.width() - textWidth) / 2)
         textBottom = int(textHeight * .9)
         
+        #Draw the text
         painter.drawText(textLeft, textBottom, self.text())
         
+        #Only draw the cursor if selected
         if self.selected:
             cursorLeft = textLeft + fontMetrics.width(self.text()[:self.cursorPos])
             if self.cursorPos < len(self.text()):
@@ -284,7 +324,7 @@ class primaryEdit(QLineEdit):
             cursorBrush.setColor(QColor(0, 0, 0, 255))
             cursor = painter.drawRect(cursorLeft, textHeight, cursorWidth, 3)
             painter.fillRect(cursorLeft, textHeight, cursorWidth, 3, cursorBrush)
-        
+    #Helpers to move the cursor around
     def cursorRight(self):
         self.cursorPos = self.cursorPos + 1
         if self.cursorPos > len(self.text()):
