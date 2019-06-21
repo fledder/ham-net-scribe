@@ -1,6 +1,14 @@
+"""
+This module defines custom widgets used in the main program.
+"""
+
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import (Qt, pyqtSignal, QObject, QEvent, Qt)
+
+'''--------------------------------------------
+Some configuration variables
+--------------------------------------------'''
 
 TABLE_STYLESHEET = '''
     background-color: rgb(32, 32, 32, 255);
@@ -31,6 +39,10 @@ EDITOR_UNSELECTED_STYLESHEET = '''
 
 
 class stationTable(QTableWidget):
+    '''--------------------------------------------
+    A table for the data to display, with various
+    helper methods.
+    --------------------------------------------'''
     
     def __init__(self, one, two):
         QTableWidget.__init__(self, one, two)
